@@ -1,0 +1,21 @@
+YNAB:
+  budget_id: <enter budget id from YNAB>
+  shared_groups:
+    - <shared group name 1>
+    - <shared group name 2>
+    - <shared group name 3>
+  account_holders:
+    - <Account holder name 1, Ex John>
+    - <Account holder name 2, Ex Jane>
+
+email:
+  sender: <sender email>
+  recipients:
+    - <recepient email address 1>
+    - <recepient email address 2>
+  subject: <subject line text>
+
+job:
+  start_date: # Enter date in YYYY-MM-DD if you want to use a custome start date, else keep blank
+  end_date: # Enter date in YYYY-MM-DD if you want to use a custome start date, else keep blank
+  period: last_week # Enter relative period you want to settle for. Acceptable values: [last_week,last_month]. Else keep blank
