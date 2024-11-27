@@ -73,7 +73,7 @@ def get_account_holder(df,account_holders):
                                                                   (df['account_name'].str.contains(account_holders[1]), account_holders[1])])
     return df
 
-def clean_transactions_response(r_transactions,category_dict,account_holders,period=None,start_date=None,end_date=None):
+def clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,period=None,start_date=None,end_date=None):
     
     start_date, end_date = get_date_range(period,start_date,end_date)
     # Import into pandas
@@ -108,6 +108,9 @@ def clean_transactions_response(r_transactions,category_dict,account_holders,per
     df['is_shared'] = df['category_id'].map(category_dict)
     df = df[df['is_shared']!=False]
     
+    # Drop ignored categories
+    df = df[~df['category_name'].isin(categories_to_ignore)]
+
     # more cleaning
     df["date"] = pd.to_datetime(df["date"])
     df["amount"] = df["amount"] / 1000
@@ -128,7 +131,7 @@ def create_report_html(df):
     if len(account_holders_sum) == 2:
         owed_amount = round((account_holders_sum.iloc[0] - account_holders_sum.iloc[1]) / 2,2)
         if account_holders_sum.iloc[0] < account_holders_sum.iloc[1]:
-            report_html += f"{account_holders_sum.index[1]} owes {account_holders_sum.index[1]} ${owed_amount}"
+            report_html += f"{account_holders_sum.index[1]} owes {account_holders_sum.index[0]} ${owed_amount}"
         elif account_holders_sum.iloc[0] > account_holders_sum.iloc[1]:
             report_html += f"{account_holders_sum.index[0]} owes {account_holders_sum.index[1]} ${owed_amount}"
         else:
@@ -155,6 +158,7 @@ def initialize_report():
     budget_id = config['YNAB']['budget_id']
     shared_groups = config['YNAB']['shared_groups']
     account_holders = config['YNAB']['account_holders']
+    categories_to_ignore = config['YNAB']['categories_to_ignore']
     
     try:
         start_date = config['job']['start_date']
@@ -178,7 +182,7 @@ def initialize_report():
     r_transactions = get_YNAB_transactions(token,budget_id)
 
     # Clean response & convert to dataframe
-    df = clean_transactions_response(r_transactions,category_dict,account_holders,period=period,start_date=start_date,end_date=end_date)
+    df = clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,period=period,start_date=start_date,end_date=end_date)
 
     html_str = create_report_html(df)
     

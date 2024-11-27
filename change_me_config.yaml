@@ -7,6 +7,9 @@ YNAB:
   account_holders:
     - <Account holder name 1, Ex John>
     - <Account holder name 2, Ex Jane>
+  categories_to_ignore:
+    - <category 1>
+    - <category 2>
 
 email:
   sender: <sender email>
