@@ -129,7 +129,7 @@ def create_report_html(df):
     report_html += "<h2>Shared Summary</h2>"
     account_holders_sum = df_cat.groupby('account_holder')['amount'].sum()
     if len(account_holders_sum) == 2:
-        owed_amount = round((account_holders_sum.iloc[0] - account_holders_sum.iloc[1]) / 2,2)
+        owed_amount = abs(round((account_holders_sum.iloc[0] - account_holders_sum.iloc[1]) / 2,2))
         if account_holders_sum.iloc[0] < account_holders_sum.iloc[1]:
             report_html += f"{account_holders_sum.index[1]} owes {account_holders_sum.index[0]} ${owed_amount}"
         elif account_holders_sum.iloc[0] > account_holders_sum.iloc[1]:
