@@ -78,6 +78,9 @@ def clean_transactions_response(r_transactions,category_dict,categories_to_ignor
     start_date, end_date = get_date_range(period,start_date,end_date)
     # Import into pandas
     df = pd.DataFrame(r_transactions["data"]["transactions"])
+
+    # Drop uncleared transactions
+    df = df[df['cleared'] != "uncleared"]
     
     # Explode out subtransactions
     df['subtransactions'] = df['subtransactions'].apply(lambda y: np.nan if len(y)==0 else y)
@@ -118,7 +121,7 @@ def clean_transactions_response(r_transactions,category_dict,categories_to_ignor
 
     df = get_account_holder(df,account_holders)
 
-    return df.sort_values(by=['date'],ascending=True)
+    return df.sort_values(by=['account_name','date'],ascending=True)
 
 def create_report_html(df):
     # Create report and store in HTML string
