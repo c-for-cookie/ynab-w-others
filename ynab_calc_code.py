@@ -147,12 +147,13 @@ def create_report_html(df):
     report_html += "<h2>Categorized, shared expenses:</h2>"
     report_html += df_cat[columns_to_include].to_html(index=False) + "<br>"
 
-    report_html += "<h2>Uncategorized expenses (not included above):</h2>"
-    df_uncat = df[(df['category_name']=="Uncategorized") | (df['approved']!=True)]
-    report_html += df_uncat[columns_to_include].to_html(index=False) + "<br>"
+    df_uncat = df[df['approved']!=True]
+    if len(df_uncat) > 0:
+        report_html += "<h2>Uncategorized expenses (not included above):</h2>"
+        report_html += df_uncat[columns_to_include].to_html(index=False) + "<br>"
 
-    report_html += "<h2>Uncategorized summary:</h2>"
-    report_html += pd.DataFrame(df_uncat.groupby('account_name')['amount'].sum()).to_html()
+        report_html += "<h2>Uncategorized summary:</h2>"
+        report_html += pd.DataFrame(df_uncat.groupby('account_name')['amount'].sum()).to_html()
     return report_html
 
 def initialize_report():
