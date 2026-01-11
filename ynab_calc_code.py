@@ -289,8 +289,6 @@ def initialize_report():
         start_date, end_date = get_date_range(period)
         html_str += create_summary_report(r_transactions,start_date=start_date)
     html_str += create_report_html(df)
-    #create_summary_report(r_transactions,period=period,start_date="2025-09-01",end_date="2025-12-31")
-    #html_str += create_summary_report(r_transactions,period=period,start_date="2025-09-01",end_date="2025-12-31")
     return html_str
 
 if __name__ == '__main__':
