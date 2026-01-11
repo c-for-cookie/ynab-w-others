@@ -6,7 +6,6 @@ from io import StringIO
 from datetime import date, timedelta
 import numpy as np
 import os
-from pandas.io.formats.style import Styler
 
 style_template = [
             # Table
@@ -179,8 +178,8 @@ def create_summary_report(r_transactions,start_date=None):
     report = report.join(df_prev_month.to_frame(name='Previous Month'), how='outer')
     report = report.join(df_three_month_avg.to_frame(name='Prev Three Month Avg'), how='outer')
     report = report.fillna(0)
-    report['% Change MoM'] = ((report['Current Month'] - report['Previous Month'])/ report['Previous Month'].replace(0, pd.NA)* 100).round(1)
-    report['% Change 3 Month'] = ((report['Current Month'] - report['Prev Three Month Avg'])/ report['Prev Three Month Avg'].replace(0, pd.NA)* 100).round(1)
+    report['% Change MoM'] = ((report['Current Month'] - report['Previous Month'])/ report['Previous Month'].replace(0, np.nan)* 100).round(1)
+    report['% Change 3 Month'] = ((report['Current Month'] - report['Prev Three Month Avg'])/ report['Prev Three Month Avg'].replace(0, np.nan)* 100).round(1)
     
     report.sort_values(by='Current Month', ascending=True, inplace=True)
 
