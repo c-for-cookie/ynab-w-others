@@ -6,6 +6,26 @@ from io import StringIO
 from datetime import date, timedelta
 import numpy as np
 import os
+from pandas.io.formats.style import Styler
+
+style_template = [
+            # Table
+            {'selector': 'table',
+             'props': [('border-collapse', 'collapse'), ('width', '100%')]},
+
+            # Headers
+            {'selector': 'th',
+             'props': [('border', '1px solid #999'),
+                       ('padding', '6px'),
+                       ('background-color', '#f5f5f5')]},
+
+            # Cells
+            {'selector': 'td',
+             'props': [('border', '1px solid #999'),
+                       ('padding', '6px')]},
+
+        ]
+
 
 def get_config(path_2_filename = "",filename = "config.yaml"):
     #importing config file
@@ -73,15 +93,7 @@ def get_account_holder(df,account_holders):
                                                                   (df['account_name'].str.contains(account_holders[1]), account_holders[1])])
     return df
 
-def clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,period=None,start_date=None,end_date=None):
-    
-    start_date, end_date = get_date_range(period,start_date,end_date)
-    # Import into pandas
-    df = pd.DataFrame(r_transactions["data"]["transactions"])
-
-    # Drop uncleared transactions
-    df = df[df['cleared'] != "uncleared"]
-    
+def explode_subtransactions(df):
     # Explode out subtransactions
     df['subtransactions'] = df['subtransactions'].apply(lambda y: np.nan if len(y)==0 else y)
     sub_transactions = df[['date','account_name','approved','import_payee_name','subtransactions']][df['subtransactions'].notnull()]
@@ -101,11 +113,27 @@ def clean_transactions_response(r_transactions,category_dict,categories_to_ignor
             sub_transactions_list.append(df_sub)
     
     sub_transactions_df = pd.concat(sub_transactions_list, ignore_index=True)
-    
+
     # Drop parent split transactions
     df = df[df['subtransactions'].isnull()]
     # Add back in split transactions
     df = pd.concat([df, sub_transactions_df], ignore_index=True)
+    return df
+
+def clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,shared_accounts,period=None,start_date=None,end_date=None):
+    
+    start_date, end_date = get_date_range(period,start_date,end_date)
+    # Import into pandas
+    df = pd.DataFrame(r_transactions["data"]["transactions"])
+
+    # Drop uncleared transactions
+    df = df[df['cleared'] != "uncleared"]
+    
+    df= explode_subtransactions(df)
+
+    # Drop non shared accounts
+    df['a'] = df['category_id'].map(category_dict)
+    df = df[~df['account_name'].isin(shared_accounts)]
 
     # Drop non shared transactions
     df['is_shared'] = df['category_id'].map(category_dict)
@@ -122,6 +150,68 @@ def clean_transactions_response(r_transactions,category_dict,categories_to_ignor
     df = get_account_holder(df,account_holders)
 
     return df.sort_values(by=['account_name','date'],ascending=True)
+
+def mom_arrow(val):
+    if pd.isna(val):
+        return ''
+    if val > 0:
+        return f'▲ {val:.0f}%'
+    if val < 0:
+        return f'▼ {abs(val):.0f}%'
+    return '0.0%'
+
+def create_summary_report(r_transactions,start_date=None):
+    # Create summary report and store in HTML string
+    curr_month = pd.to_datetime(start_date).to_period('M')
+    df = pd.DataFrame(r_transactions["data"]["transactions"])
+    df = explode_subtransactions(df)
+    df = df[~df['category_name'].isin(['Uncategorized','Inflow: Ready to Assign'])]
+    df['month'] = pd.to_datetime(df['date']).dt.to_period('M')
+    df["amount"] = df["amount"] / 1000
+    df_current = df[df['month'] == curr_month]
+    df_prev = df[df['month'] == curr_month - 1]
+    
+    df_curr_month = df_current.groupby('category_name')['amount'].sum()
+    df_prev_month = df_prev.groupby('category_name')['amount'].sum()
+    df_three_month_avg = df[df['month'].isin([curr_month - 1, curr_month - 2, curr_month -3])].groupby('category_name')['amount'].sum() / 3
+
+    report = df_curr_month.to_frame(name='Current Month')
+    report = report.join(df_prev_month.to_frame(name='Previous Month'), how='outer')
+    report = report.join(df_three_month_avg.to_frame(name='Prev Three Month Avg'), how='outer')
+    report = report.fillna(0)
+    report['% Change MoM'] = ((report['Current Month'] - report['Previous Month'])/ report['Previous Month'].replace(0, pd.NA)* 100).round(1)
+    report['% Change 3 Month'] = ((report['Current Month'] - report['Prev Three Month Avg'])/ report['Prev Three Month Avg'].replace(0, pd.NA)* 100).round(1)
+    
+    report.sort_values(by='Current Month', ascending=True, inplace=True)
+
+    report['MoM Change'] = report['% Change MoM'].apply(mom_arrow)
+    report['Change From 3 month'] = report['% Change 3 Month'].apply(mom_arrow)
+
+
+    for col in ['Current Month', 'Previous Month']:
+        total = report[col].sum()
+        report[f'{col} %'] = (
+            report[col] / total * 100
+            if total != 0 else 0
+        )
+
+    columns_order = [
+        'Current Month', 'Previous Month', 'Prev Three Month Avg', 'MoM Change', 'Change From 3 month']
+
+    styler = (
+    report[columns_order].style
+        .set_table_styles(style_template)
+        .format({
+            'Current Month': '${:,.2f}',
+            'Previous Month': '${:,.2f}',
+            'Prev Three Month Avg': '${:,.2f}',
+        })
+)
+
+    report_html = "<h2>Expense Summary</h2>" + styler.to_html()
+    return report_html
+
+
 
 def create_report_html(df):
     # Create report and store in HTML string
@@ -142,10 +232,15 @@ def create_report_html(df):
     else:
         report_html += f"error: Not 2 account holders. Found {account_holders_sum.index}"
 
-    report_html += pd.DataFrame(account_holders_sum).to_html() + "<br><br>"
+    report_html += pd.DataFrame(account_holders_sum).style.set_table_styles(style_template).format({
+        'amount': '${:,.2f}',
+    }).to_html() + "<br><br>"
 
     report_html += "<h2>Categorized, shared expenses:</h2>"
-    report_html += df_cat[columns_to_include].to_html(index=False) + "<br>"
+    report_html += df_cat[columns_to_include].sort_values(by='date').style.set_table_styles(style_template).format({
+            'date': '{:%b %d}',
+            'amount': '${:,.2f}',
+        }).to_html(index=False) + "<br>"
 
     df_uncat = df[df['approved']!=True]
     if len(df_uncat) > 0:
@@ -161,6 +256,7 @@ def initialize_report():
     token = os.environ['ynab_api_token']
     budget_id = config['YNAB']['budget_id']
     shared_groups = config['YNAB']['shared_groups']
+    shared_accounts = config['YNAB']['shared_accounts']
     account_holders = config['YNAB']['account_holders']
     categories_to_ignore = config['YNAB']['categories_to_ignore']
     
@@ -186,10 +282,15 @@ def initialize_report():
     r_transactions = get_YNAB_transactions(token,budget_id)
 
     # Clean response & convert to dataframe
-    df = clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,period=period,start_date=start_date,end_date=end_date)
+    df = clean_transactions_response(r_transactions,category_dict,categories_to_ignore,account_holders,shared_accounts,period=period,start_date=start_date,end_date=end_date)
 
-    html_str = create_report_html(df)
-    
+    html_str = ''
+    if period is not None:
+        start_date, end_date = get_date_range(period)
+        html_str += create_summary_report(r_transactions,start_date=start_date)
+    html_str += create_report_html(df)
+    #create_summary_report(r_transactions,period=period,start_date="2025-09-01",end_date="2025-12-31")
+    #html_str += create_summary_report(r_transactions,period=period,start_date="2025-09-01",end_date="2025-12-31")
     return html_str
 
 if __name__ == '__main__':
